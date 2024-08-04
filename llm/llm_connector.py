@@ -9,3 +9,5 @@ def get_mistral_model():
         max_retries=2
     )
     return llm
+
+
