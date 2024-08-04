@@ -1,6 +1,8 @@
+from typing import TypedDict
 from pydantic.v1 import BaseModel, Field
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+
+from dataloader.reddit_helper import QueryResult
+from dataloader.reddit_loader import get_top_posts
 
 
 class FinalAnswer(BaseModel):
@@ -9,12 +11,27 @@ class FinalAnswer(BaseModel):
     reddit_users: list[str] = Field(..., description="The list of reddit users that are used to generate the answer.")
 
 
-def get_final_answer_llm(final_answer_prompt: str, model: object):
-    parser = JsonOutputParser(pydantic_object=FinalAnswer)
-    final_answer_prompt_template = PromptTemplate(
-        template=final_answer_prompt,
-        input_variables=["query", "reddit_data"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-    final_answer_llm = final_answer_prompt_template | model | parser
-    return final_answer_llm
+# State
+class AgentState(TypedDict):
+    final_answer_llm: object
+    limit: int
+    query: str
+    reddit_data: QueryResult
+    final_answer: FinalAnswer
+
+
+# Nodes
+def reddit_node(agent_state: AgentState):
+    print(f"{'=' * 10} Reddit Node {'=' * 10}")
+    agent_state["reddit_data"] = get_top_posts(agent_state["query"], agent_state["limit"])
+    return {"reddit_data": agent_state["reddit_data"]}
+
+
+def llm_node(agent_state: AgentState):
+    print(f"{'=' * 10} LLM Node {'=' * 10}")
+    model = agent_state["final_answer_llm"]
+    query = agent_state["query"]
+    reddit_data = agent_state["reddit_data"]
+    response = model.invoke({"query": query, "reddit_data": reddit_data})
+    agent_state["final_answer"] = response
+    return {"final_answer": response}
